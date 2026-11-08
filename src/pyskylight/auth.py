@@ -8,6 +8,10 @@ is OAuth2 Authorization-Code + PKCE:
 2. ``POST /auth/session`` with ``{authenticity_token, email, password}`` -> on success
    the server redirects (following a couple of hops) to
    ``skylight-family://welcome?code=...&state=...``.
+   If the account has email verification (MFA) enabled, the server instead redirects
+   to ``/auth/mfa_challenge/new``; the emailed code is POSTed to
+   ``/auth/mfa_challenge`` with ``{authenticity_token, code}`` and the redirect chain
+   then continues to ``skylight-family://``.
 3. ``POST /oauth/token`` with the code + PKCE ``code_verifier`` -> ``access_token``
    (+ ``refresh_token``).
 
@@ -21,7 +25,7 @@ import hashlib
 import re
 import secrets
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -35,10 +39,15 @@ from .constants import (
     OAUTH_REDIRECT_URI,
     OAUTH_SCOPE,
 )
-from .errors import SkylightAuthError, SkylightError
+from .errors import SkylightAuthError, SkylightError, SkylightMFARequiredError
 
 _CSRF_RE = re.compile(r'name="authenticity_token"[^>]*value="([^"]+)"')
 _REDIRECT_CODES = (301, 302, 303, 307, 308)
+_MFA_PATH = "/auth/mfa_challenge"
+
+#: Called with no arguments when Skylight asks for the emailed verification code;
+#: returns the code the user received.
+MFACodeProvider = Callable[[], str]
 
 
 @dataclass
@@ -95,15 +104,51 @@ def _follow_to_form(client: httpx.Client, resp: httpx.Response, base_url: str) -
     return resp
 
 
-def _chase_to_redirect(client: httpx.Client, resp: httpx.Response, base_url: str) -> Optional[str]:
-    """After the login POST, follow redirects until the ``skylight-family:`` location."""
+def _chase_to_redirect(
+    client: httpx.Client, resp: httpx.Response, base_url: str
+) -> Tuple[Optional[str], httpx.Response]:
+    """Follow redirects until the ``skylight-family:`` location (or a non-redirect).
+
+    Returns the final ``Location`` (``None`` if the chain ended on a page) and the last
+    response, so the caller can inspect a page such as the MFA challenge form.
+    """
     loc = resp.headers.get("location")
     hops = 0
     while loc and not loc.startswith("skylight-family:") and hops < 8:
         resp = _get_no_redirect(client, loc if loc.startswith("http") else base_url + loc)
         loc = resp.headers.get("location")
         hops += 1
-    return loc
+    return loc, resp
+
+
+def _is_mfa_page(resp: httpx.Response) -> bool:
+    return resp.status_code == 200 and _MFA_PATH in resp.request.url.path
+
+
+def _submit_mfa(
+    client: httpx.Client,
+    page: httpx.Response,
+    base_url: str,
+    mfa_code: Optional[MFACodeProvider],
+) -> Tuple[Optional[str], httpx.Response]:
+    """Answer the emailed-code challenge and continue the redirect chain."""
+    if mfa_code is None:
+        raise SkylightMFARequiredError(
+            "Skylight emailed a verification code; pass mfa_code= to login() to supply it"
+        )
+    csrf = _CSRF_RE.search(page.text)
+    if not csrf:
+        raise SkylightAuthError("Could not read the verification-code form (no CSRF token)")
+    code = (mfa_code() or "").strip()
+    if not code:
+        raise SkylightAuthError("No verification code entered")
+    resp = client.post(
+        base_url + _MFA_PATH,
+        data={"authenticity_token": csrf.group(1), "code": code},
+        headers={"User-Agent": BROWSER_UA},
+        follow_redirects=False,
+    )
+    return _chase_to_redirect(client, resp, base_url)
 
 
 def login(
@@ -113,10 +158,16 @@ def login(
     base_url: str = DEFAULT_BASE_URL,
     http: Optional[httpx.Client] = None,
     timeout: float = DEFAULT_TIMEOUT,
+    mfa_code: Optional[MFACodeProvider] = None,
 ) -> Credentials:
     """Log in via OAuth2 PKCE and return :class:`Credentials`.
 
-    Raises :class:`SkylightAuthError` on bad credentials or an unexpected response.
+    ``mfa_code`` is called (only if Skylight asks) to obtain the emailed verification
+    code, e.g. ``mfa_code=lambda: input("Code: ")``.
+
+    Raises :class:`SkylightMFARequiredError` if a code is required but no provider was
+    given, and :class:`SkylightAuthError` on bad credentials, a rejected code, or an
+    unexpected response.
     """
     base_url = base_url.rstrip("/")
     owns_client = http is None
@@ -153,7 +204,11 @@ def login(
                 headers={"User-Agent": BROWSER_UA},
                 follow_redirects=False,
             )
-            location = _chase_to_redirect(client, resp, base_url)
+            location, last = _chase_to_redirect(client, resp, base_url)
+            if not location and _is_mfa_page(last):
+                location, last = _submit_mfa(client, last, base_url, mfa_code)
+                if not (location and location.startswith("skylight-family:")):
+                    raise SkylightAuthError("Verification code was rejected or expired")
             if not (location and location.startswith("skylight-family:")):
                 raise SkylightAuthError("Invalid Skylight email or password")
             query = parse_qs(urlparse(location).query)

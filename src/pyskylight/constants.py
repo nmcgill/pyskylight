@@ -18,7 +18,7 @@ API_PREFIX = "/api"
 DEFAULT_TIMEOUT = 30.0
 
 #: A stable, honest user agent for data (API) requests.
-USER_AGENT = "pyskylight (+https://github.com/joshuaswarren/pyskylight)"
+USER_AGENT = "pyskylight (+https://github.com/nmcgill/pyskylight)"
 
 #: The web OAuth login pages are served to browsers; present a browser UA there.
 BROWSER_UA = (

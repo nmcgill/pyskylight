@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 
 import pytest
 
@@ -67,7 +68,8 @@ def test_token_cache_roundtrip(tmp_path):
     assert loaded.refresh_token == "RT"
     assert loaded.expires_at == 8200.0
     # owner-only perms
-    assert oct(cache.path.stat().st_mode & 0o777) == "0o600"
+    if sys.platform != "win32":  # POSIX perms are not enforced on Windows
+        assert oct(cache.path.stat().st_mode & 0o777) == "0o600"
 
 
 def test_token_cache_base_url_mismatch(tmp_path):

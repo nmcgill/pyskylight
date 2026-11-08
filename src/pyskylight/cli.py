@@ -9,7 +9,9 @@ re-authenticates automatically if the token has expired.
 from __future__ import annotations
 
 import json
+import sys
 import time
+from datetime import date, timedelta
 from typing import Any, Callable, List, Optional
 
 import typer
@@ -43,6 +45,16 @@ def _resource_dict(resource: Resource) -> dict:
     }
 
 
+def _prompt_mfa_code() -> str:
+    """Ask for the emailed verification code (on stderr, so JSON stdout stays clean)."""
+    return str(typer.prompt("Skylight emailed you a verification code. Code", err=True))
+
+
+def _mfa_provider() -> Optional[Callable[[], str]]:
+    """Prompt for a code only when a human is at the terminal."""
+    return _prompt_mfa_code if sys.stdin.isatty() else None
+
+
 def _build_client(settings: Settings, credentials_required: bool = True) -> SkylightClient:
     """Construct a client from cached token or by logging in.
 
@@ -61,7 +73,9 @@ def _build_client(settings: Settings, credentials_required: bool = True) -> Skyl
             except SkylightError:
                 pass  # refresh failed; fall through to a full login if we can
     if settings.email and settings.password:
-        client = SkylightClient.login(settings.email, settings.password, base_url=settings.base_url)
+        client = SkylightClient.login(
+            settings.email, settings.password, base_url=settings.base_url, mfa_code=_mfa_provider()
+        )
         cache.save(client.credentials, settings.base_url)
         return client
     raise typer.BadParameter(
@@ -83,7 +97,10 @@ def _run(action: Callable[[SkylightClient], Any]) -> Any:
                 raise
             TokenCache().clear()
             fresh = SkylightClient.login(
-                settings.email, settings.password, base_url=settings.base_url
+                settings.email,
+                settings.password,
+                base_url=settings.base_url,
+                mfa_code=_mfa_provider(),
             )
             TokenCache().save(fresh.credentials, settings.base_url)
             return action(fresh)
@@ -124,7 +141,9 @@ def login() -> None:
     if not (settings.email and settings.password):
         raise typer.BadParameter("Set SKYLIGHT_EMAIL and SKYLIGHT_PASSWORD first.")
     try:
-        client = SkylightClient.login(settings.email, settings.password, base_url=settings.base_url)
+        client = SkylightClient.login(
+            settings.email, settings.password, base_url=settings.base_url, mfa_code=_prompt_mfa_code
+        )
     except SkylightError as exc:
         typer.echo(json.dumps({"ok": False, "error": str(exc), "type": type(exc).__name__}))
         raise typer.Exit(code=1)
@@ -443,10 +462,16 @@ def list_add(
 
 
 @app.command()
-def chores(frame: Optional[str] = typer.Option(None, "--frame")) -> None:
-    """List chores."""
+def chores(
+    frame: Optional[str] = typer.Option(None, "--frame"),
+    date_from: Optional[str] = typer.Option(None, "--from", help="YYYY-MM-DD (default today)"),
+    date_to: Optional[str] = typer.Option(None, "--to", help="YYYY-MM-DD (default +7 days)"),
+) -> None:
+    """List chores in a date window (the API requires one)."""
     fid = _frame(frame)
-    _emit(_run(lambda c: c.list_chores(fid)))
+    start = date_from or date.today().isoformat()
+    end = date_to or (date.fromisoformat(start) + timedelta(days=7)).isoformat()
+    _emit(_run(lambda c: c.list_chores(fid, after=start, before=end)))
 
 
 # --------------------------------------------------------------------------- #

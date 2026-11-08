@@ -11,7 +11,7 @@ from httpx import Response
 
 from pyskylight.auth import Credentials, login, refresh
 from pyskylight.constants import DEFAULT_BASE_URL
-from pyskylight.errors import SkylightAuthError, SkylightError
+from pyskylight.errors import SkylightAuthError, SkylightError, SkylightMFARequiredError
 
 B = DEFAULT_BASE_URL
 TOKEN_OK = {
@@ -133,3 +133,92 @@ def test_refresh_network_error():
     respx.post(B + "/oauth/token").mock(side_effect=httpx.ConnectError("down"))
     with pytest.raises(SkylightError):
         refresh("RT")
+
+
+# --- Emailed verification code (MFA) ---------------------------------------- #
+# Shape captured from live traffic 2026-11-08:
+#   POST /auth/session -> 302 /auth/mfa_challenge/start -> 302 /auth/mfa_challenge/new
+#   (200, form {authenticity_token, code}) ; POST /auth/mfa_challenge -> 302
+#   /oauth/authorize -> 302 skylight-family://welcome?code=..&state=..
+
+
+def _setup_mfa(*, accept_code="123456", mfa_csrf="mfacsrf"):
+    holder = _setup_oauth()
+    calls = {"posted": None}
+
+    respx.post(B + "/auth/session").mock(
+        return_value=Response(302, headers={"Location": B + "/auth/mfa_challenge/start"})
+    )
+    respx.get(B + "/auth/mfa_challenge/start").mock(
+        return_value=Response(302, headers={"Location": "/auth/mfa_challenge/new"})
+    )
+    form = (
+        f'<form action="/auth/mfa_challenge" method="post">'
+        f'<input type="hidden" name="authenticity_token" value="{mfa_csrf}">'
+        f'<input type="text" name="code" autocomplete="one-time-code"></form>'
+        if mfa_csrf
+        else "<form>nothing</form>"
+    )
+    respx.get(B + "/auth/mfa_challenge/new").mock(return_value=Response(200, html=form))
+
+    def on_code(request):
+        body = parse_qs(request.content.decode())
+        calls["posted"] = body
+        if body.get("code", [""])[0] != accept_code:
+            return Response(200, html="Invalid code")
+        return Response(302, headers={"Location": B + "/oauth/authorize?resume=1"})
+
+    respx.post(B + "/auth/mfa_challenge").mock(side_effect=on_code)
+
+    def on_authorize(request):
+        q = parse_qs(urlparse(str(request.url)).query)
+        if "resume" in q:
+            return Response(
+                302,
+                headers={
+                    "Location": f"skylight-family://welcome?code=AUTHCODE&state={holder['state']}"
+                },
+            )
+        holder["state"] = q.get("state", [""])[0]
+        return Response(
+            200, html='<form><input type="hidden" name="authenticity_token" value="c"></form>'
+        )
+
+    respx.get(B + "/oauth/authorize").mock(side_effect=on_authorize)
+    return calls
+
+
+@respx.mock
+def test_login_mfa_success():
+    calls = _setup_mfa()
+    creds = login("you@example.com", "pw", mfa_code=lambda: " 123456 ")
+    assert creds.access_token == "AT"
+    assert calls["posted"] == {"authenticity_token": ["mfacsrf"], "code": ["123456"]}
+
+
+@respx.mock
+def test_login_mfa_required_without_provider():
+    _setup_mfa()
+    with pytest.raises(SkylightMFARequiredError):
+        login("you@example.com", "pw")
+
+
+@respx.mock
+def test_login_mfa_wrong_code():
+    _setup_mfa()
+    with pytest.raises(SkylightAuthError, match="rejected"):
+        login("you@example.com", "pw", mfa_code=lambda: "000000")
+
+
+@respx.mock
+def test_login_mfa_empty_code():
+    _setup_mfa()
+    with pytest.raises(SkylightAuthError, match="No verification code"):
+        login("you@example.com", "pw", mfa_code=lambda: "  ")
+
+
+@respx.mock
+def test_login_mfa_form_without_csrf():
+    _setup_mfa(mfa_csrf="")
+    with pytest.raises(SkylightAuthError, match="CSRF"):
+        login("you@example.com", "pw", mfa_code=lambda: "123456")

@@ -12,6 +12,7 @@ from .constants import DEFAULT_BASE_URL
 from .errors import (
     SkylightAPIError,
     SkylightAuthError,
+    SkylightMFARequiredError,
     SkylightError,
     SkylightNotFoundError,
     SkylightPlusRequiredError,
@@ -27,7 +28,7 @@ from .models import (
     Sitting,
 )
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 __all__ = [
     "__version__",
@@ -37,6 +38,7 @@ __all__ = [
     "login",
     "SkylightError",
     "SkylightAuthError",
+    "SkylightMFARequiredError",
     "SkylightPlusRequiredError",
     "SkylightNotFoundError",
     "SkylightRateLimitError",

@@ -75,7 +75,7 @@ class FakeClient:
     def list_lists(self, frame_id):
         return [{"id": "1"}]
 
-    def list_chores(self, frame_id):
+    def list_chores(self, frame_id, **params):
         return [{"id": "1"}]
 
     def create_calendar_event(self, frame_id, summary, **fields):
@@ -116,7 +116,7 @@ def test_login_command(monkeypatch):
 
     class FakeSky:
         @classmethod
-        def login(cls, email, password, base_url):
+        def login(cls, email, password, base_url, mfa_code=None):
             return FakeClient()
 
     monkeypatch.setattr(cli, "SkylightClient", FakeSky)
@@ -245,7 +245,7 @@ def test_auth_retry(monkeypatch):
 
     class FakeSky:
         @classmethod
-        def login(cls, email, password, base_url):
+        def login(cls, email, password, base_url, mfa_code=None):
             return second
 
     monkeypatch.setattr(cli, "SkylightClient", FakeSky)

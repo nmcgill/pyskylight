@@ -22,6 +22,13 @@ class SkylightAuthError(SkylightError):
     """
 
 
+class SkylightMFARequiredError(SkylightAuthError):
+    """Skylight emailed a verification code but no way to supply it was given.
+
+    Pass ``mfa_code=`` (a zero-argument callable returning the code) to ``login()``.
+    """
+
+
 class SkylightPlusRequiredError(SkylightError):
     """The endpoint requires an active Skylight Plus subscription (HTTP 403).
 

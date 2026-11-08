@@ -4,12 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyskylight"
-version = "0.3.2"
+version = "0.4.0"
 description = "Unofficial Python client and CLI for the Skylight Calendar / Buddy API"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Joshua Warren" }]
+maintainers = [{ name = "nmcgill" }]
 keywords = ["skylight", "calendar", "ourskylight", "api", "home-automation", "cli"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -40,9 +41,9 @@ dev = [
 skylight = "pyskylight.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/joshuaswarren/pyskylight"
-Repository = "https://github.com/joshuaswarren/pyskylight"
-Issues = "https://github.com/joshuaswarren/pyskylight/issues"
+Homepage = "https://github.com/nmcgill/pyskylight"
+Repository = "https://github.com/nmcgill/pyskylight"
+Issues = "https://github.com/nmcgill/pyskylight/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pyskylight"]

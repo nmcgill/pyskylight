@@ -68,7 +68,7 @@ def test_build_client_login_branch(monkeypatch):
 
     class FakeSky:
         @classmethod
-        def login(cls, email, password, base_url):
+        def login(cls, email, password, base_url, mfa_code=None):
             return FakeLoggedIn()
 
     monkeypatch.setattr(cli, "SkylightClient", FakeSky)
@@ -105,7 +105,7 @@ def test_build_client_refresh_failure_falls_back_to_login(monkeypatch):
 
     class FakeSky:
         @classmethod
-        def login(cls, email, password, base_url):
+        def login(cls, email, password, base_url, mfa_code=None):
             return FakeLoggedIn()
 
     monkeypatch.setattr(cli, "SkylightClient", FakeSky)

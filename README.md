@@ -36,7 +36,7 @@ app API (`app.ourskylight.com`) that the community has reverse-engineered. It is
 
 ```bash
 # Until it is published to PyPI, install from git:
-pip install "git+https://github.com/joshuaswarren/pyskylight"
+pip install "git+https://github.com/nmcgill/pyskylight"
 # (PyPI, once published: pip install pyskylight)
 # or from source:
 pip install -e ".[dev]"

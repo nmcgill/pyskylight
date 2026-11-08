@@ -12,7 +12,7 @@ adjust once a real request has been captured.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
@@ -70,9 +70,15 @@ class SkylightClient:
         base_url: str = DEFAULT_BASE_URL,
         http: Optional[httpx.Client] = None,
         timeout: float = DEFAULT_TIMEOUT,
+        mfa_code: Optional[Callable[[], str]] = None,
     ) -> "SkylightClient":
-        """Log in and return a ready-to-use client."""
-        creds = _login(email, password, base_url=base_url, http=http, timeout=timeout)
+        """Log in and return a ready-to-use client.
+
+        ``mfa_code`` supplies the emailed verification code if Skylight asks for one.
+        """
+        creds = _login(
+            email, password, base_url=base_url, http=http, timeout=timeout, mfa_code=mfa_code
+        )
         return cls(creds, base_url=base_url, http=http, timeout=timeout)
 
     def close(self) -> None:
