@@ -20,6 +20,10 @@ DEFAULT_TIMEOUT = 30.0
 #: A stable, honest user agent for data (API) requests.
 USER_AGENT = "pyskylight (+https://github.com/nmcgill/pyskylight)"
 
+#: API version the current apps send. Without it the server silently ignores newer
+#: fields (e.g. ``up_for_grabs`` on chores). Live-verified 2026-11-08.
+API_VERSION = "2026-05-01"
+
 #: The web OAuth login pages are served to browsers; present a browser UA there.
 BROWSER_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "

@@ -33,6 +33,14 @@ app = typer.Typer(
 # Helpers
 # --------------------------------------------------------------------------- #
 def _emit(obj: Any) -> None:
+    # Windows consoles/pipes default to a legacy codepage that can't encode emoji
+    # (common in Skylight event/chore titles); force UTF-8 output.
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        try:
+            reconfigure(encoding="utf-8")
+        except (ValueError, OSError):  # pragma: no cover - stream already in use
+            pass
     typer.echo(json.dumps(obj, indent=2, default=str, ensure_ascii=False))
 
 
@@ -471,7 +479,7 @@ def chores(
     fid = _frame(frame)
     start = date_from or date.today().isoformat()
     end = date_to or (date.fromisoformat(start) + timedelta(days=7)).isoformat()
-    _emit(_run(lambda c: c.list_chores(fid, after=start, before=end)))
+    _emit(_run(lambda c: c.list_chores(fid, after=start, before=end, include_up_for_grabs="true")))
 
 
 # --------------------------------------------------------------------------- #

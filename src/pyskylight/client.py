@@ -18,7 +18,7 @@ import httpx
 
 from .auth import Credentials
 from .auth import login as _login
-from .constants import API_PREFIX, DEFAULT_BASE_URL, DEFAULT_TIMEOUT, USER_AGENT
+from .constants import API_PREFIX, API_VERSION, DEFAULT_BASE_URL, DEFAULT_TIMEOUT, USER_AGENT
 from .errors import (
     SkylightAPIError,
     SkylightAuthError,
@@ -99,6 +99,7 @@ class SkylightClient:
         headers.setdefault("Authorization", self.credentials.bearer_header)
         headers.setdefault("Accept", "application/json")
         headers.setdefault("User-Agent", USER_AGENT)
+        headers.setdefault("skylight-api-version", API_VERSION)
         try:
             resp = self._http.request(method, url, headers=headers, **kwargs)
         except httpx.HTTPError as exc:
@@ -435,7 +436,12 @@ class SkylightClient:
                 **(extra or {}),
             }
         )
-        return self._request("POST", self._frame_path(frame_id, "/chores"), json=body)
+        # Live-verified 2026-11-08: plain ``POST /chores`` requires a category and drops
+        # ``up_for_grabs``; ``create_multiple`` (flat body) honors both. Returns
+        # ``{"data": [chore]}``.
+        return self._request(
+            "POST", self._frame_path(frame_id, "/chores/create_multiple"), json=body
+        )
 
     def create_chores(self, frame_id: str | int, chores: Any) -> Any:
         """Bulk-create chores. ``chores`` is the full request body (list or dict)."""
