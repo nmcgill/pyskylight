@@ -426,7 +426,8 @@ class SkylightClient:
                 "start": start,
                 "start_time": start_time,
                 "reward_points": reward_points,
-                "category_id": category_id,
+                # create_multiple assigns via a list; a lone category_id -> 422.
+                "category_ids": [str(category_id)] if category_id is not None else None,
                 "recurring": recurring,
                 "recurrence_set": recurrence_set,
                 "recurring_until": recurring_until,
